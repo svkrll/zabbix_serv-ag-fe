@@ -1,0 +1,92 @@
+---
+  - name: Install Zabbix repository
+    ansible.builtin.command: rpm -Uvh https://repo.zabbix.com/zabbix/7.0/centos/8/x86_64/zabbix-release-7.0-4.el8.noarch.rpm
+    register: zabbix_repo
+    tags: 
+      - Server
+      - Agent
+      - Frontend
+
+  - name: Clean dnf cache
+    ansible.builtin.command: dnf clean all
+    tags: 
+      - Server
+      - Agent
+      - Frontend
+
+  - name: Switch to php 8.0 repo
+    ansible.builtin.command: dnf module switch-to php:8.0
+    tags: 
+      - Server
+      - Agent
+      - Frontend
+
+  - name: Enable php 8.0 repo
+    ansible.builtin.command: dnf module enable php:8.0 -y
+    tags: 
+      - Server
+      - Agent
+      - Frontend
+
+  - name: Install Zabbix 
+    ansible.builtin.dnf:
+      name:
+        zabbix-server-pgsql
+        zabbix-web-pgsql
+        zabbix-nginx-conf
+        zabbix-sql-scripts
+        zabbix-selinux-policy
+        zabbix-agent
+      state: present
+    tags: 
+      - Server
+      - Agent
+      - Frontend
+
+  - name: Import initial schema
+    shell: zcat /usr/share/zabbix-sql-scripts/postgresql/server.sql.gz | sudo -u zabbix psql zabbix
+    tags: 
+      - Server   
+
+  - name: Setting DBPassword
+    lineinfile:
+      path: /etc/zabbix/zabbix_server.conf
+      regexp: '^DBPassword='
+      line: 'DBPassword = {{PASSWORD}}'
+    tags: 
+      - Server 
+  
+  - name: Configure Nginx
+    ansible.builtin.block: 
+      - name: add port
+        ansible.builtin.lineinfile: 
+          path: /etc/nginx/conf.d/zabbix.conf
+          regexp: '^#*listen'
+          line: 'listen 8080;'
+
+
+
+      - name: add server_name
+        ansible.builtin.lineinfile: 
+          path: /etc/nginx/conf.d/zabbix.conf
+          regexp: '^#*server_name'
+          line: 'server_name {{HOSTDOMAIN}};'
+    tags: 
+      - Server 
+
+  - name: Start and enable services
+    ansible.builtin.systemd_service:
+      name: 
+        zabbix-server
+        zabbix-agent
+        nginx
+        php-fpm
+      state: restarted
+      enabled: true
+    tags: 
+      - Server   
+
+          
+
+
+  
